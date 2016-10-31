@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>drag-n-drop image smoothing test</title>
+	<meta charset=UTF-8>
+
+	<style type=text/css>
+		html,body,
+		#viewport { font-family:'Segoe UI',sans-serif; font-size:12pt; width:100%;height:100%; margin:0;padding:0;border:0 }
+		#viewport { /*IE7*/ vertical-align:top }
+
+		#btnbox { position:fixed; white-space:nowrap; padding:2em; display:inline-block; top:0;left:0; float:left/*ie7*/;
+				border:1px solid black; background-color:white; background-color:rgba(255,255,255,0.9) }
+		.rbspan { margin-left:0.5em }
+		#rb1,#rb2 { margin-left:1em }							/* rb2 field:  dim or normal */
+		  .dim,
+		  .absent,
+		  .presentdim { color:gainsboro }
+
+		  .normal,
+		  .present { transition: color 1.5s; color:black }
+
+		#showtime { text-align:right; font-size:10.5pt; margin-top:1em }		/* showtime:  absent presentdim or present */
+		  .absent { display:none }
+
+		  .present,
+		  .presentdim { display:block }
+
+		#imgdiv { min-width:25px;min-height:25px }
+		.imgerr { min-width:200px; padding:2em; text-align:center; float:left; white-space:nowrap }
+
+		img,canvas { margin:0;padding:0;border:0; vertical-align:text-top }
+
+		.offscreen { position:absolute; top:0;left:-100px; width:0;height:0;margin:0;padding:0; visibility:hidden }
+	</style>
+	<script>
+
+		/**************************************************************************************************************************************
+		*                                                                                                                                     *
+		*  https://connect.microsoft.com/IE/feedback/details/1014683/poor-down-sample-of-images-since-ie9                                     *
+		*  https://connect.microsoft.com/IE/feedback/details/867789/regarding-support-case-114031311262497-poor-png-image-quality-ie9-and-up  *
+		*  https://connect.microsoft.com/IE/Feedback/DownloadFile?downloadLink=7f15b4c3-1a90-4322-b2b3-d168b07960e4%3B12.png                  *
+		*                                                                                                                                     *
+		*  https://googledrive.com/host/0B8BLd2qPPV7XclhDOGRZVWhQckk/12.png                                                                   *
+		*                                                                                                                                     *
+		**************************************************************************************************************************************/
+
+		var initial_IMG_url= location.search.match(/imgfile=([^&]*)|$/i)[1] || '12.png'		// halftone image sample from sgtty
+
+		onload=function(){
+			rb1.checked= true
+
+			canvasAbsentRdy()					// this will remove the [rb2] button (Fit View and Smooth) if canvas API not present here
+			imgdiv.marLeft= btnbox.offsetWidth			// now the imgdiv Left-Margin can be committed
+			imgdiv.style.marginLeft= btnbox.offsetWidth+"px"	//
+										//
+			imgOnerrorRdy()						// this sets img.onerror handler, and displays a queued error that might've come earlier than this onload event
+			onresizeRdy()						// this sets window.onresize handler.  img.onload will postpone displaying image until imgdiv margin is set (above).  onresize displays the img.
+			if (canvas&&context){					//
+				rb0.onchange= rbShowImg				//
+				rb1.onchange= rbShowImg				//
+				rb2.onchange= rbShowImg				//
+				rb2UnDisabledRdy()				// this will un-"disabled" the [rb2] button after image-onload ==> canvas-prefetch is successfully completed.  ("source" imageData only gets loaded once-and-for-all during prefetch).
+			}else{
+				rb1.chkd= true					// this is for legacy IE (which goes whack-o with rb.onchange)
+				rb0.onclick= 					//
+				rb1.onclick= function(){			//
+					if (!this.chkd){			//
+						this.checked= this.chkd= true	//
+						if (this==rb0)	var r=rb1	//
+						else		var r=rb0	//
+						r.checked= r.chkd= false	//
+						rbShowImg()			//
+					}					//
+				}						//
+			}
+			ondropRdy()						// this sets the document.drag/drop handlers.  [rb2] button gets disabled in ondrop, then un-disabled in img.onload.
+		}
+
+		var source, sourceData
+		var canvas= document.createElement("canvas")
+		var context= (canvas && ("getContext" in canvas) && canvas.getContext('2d'))
+		function canvasAbsentRdy(){}
+		if (!context) canvasAbsentRdy= function(){ (window.rb2=rb2).parentNode.parentNode.removeChild(rb2.parentNode) }		// remove <label> that contains [rb2].  be careful to explicitly declare "rb2", else later refs to window[nameditem=id=rb2] will throw.
+
+		var img= document.createElement("img")
+		img.onload= function(){
+			if (img.src.substr(0,5)=='blob:') URL.revokeObjectURL(img.src)
+
+			if (!("naturalHeight" in img) || (img.naturalWidth==0) || (img.naturalHeight==0)){		// early IE: doesn't recognize naturalWidth/Height.  all IE: naturalWidth/Height might be 0 if only aspect-ratio is known (eg SVG)
+				img.intrinsicWidth=  img.width
+				img.intrinsicHeight= img.height
+			}else{
+				img.intrinsicWidth=  img.naturalWidth
+				img.intrinsicHeight= img.naturalHeight
+			}
+			if (!(img.intrinsicWidth && img.intrinsicHeight)){
+				imgOnerrorRdy(['Image file has zero dimension.'])		// pass error message in array - see handler				
+				ondropRdy()
+			}else{
+				if (canvas&&context){
+
+					canvas.width=  Math.floor(img.intrinsicWidth)		// naturalWidth/Height "should be" integer whole-pixel
+					canvas.height= Math.floor(img.intrinsicHeight)		//
+												//
+					var nw= Math.ceil(canvas.width)				// justincase.  guaranteed to be whole-pixel
+					var nh= Math.ceil(canvas.height)			//
+												//
+					context.drawImage(img,0,0)				// CHROME: for SVG.  the img needs to be captured at intrinsic size here BEFORE the img is sized-down in onresizeRdy() call below.
+
+					try{ context.getImageData(0,0,1,1) }			// here is where a CORS "tainted" image will throw.  Read one pixel to check.
+					catch(e){						//
+						imgOnerrorRdy(e)				//
+						ondropRdy()					//
+						return						//
+					}							// After IE throws "Security Error" here once, it never recovers.  Keeps throwing, even for later localfile drag-n-drops.  humph.
+
+
+					function prefetchSource(){
+
+						var t0= +new Date()
+
+						/////////////////////////////////////////////////////////////////////////////////
+						//
+						// IE9, Win10+IE11 and MS-Edge have initial 4096x4096 clipping region.
+						// (contrary to w3c specs).
+						// This clips the drawImage(img,..) snapshot, so everything right/bottom is blank.
+						//
+						// Workaround:  Chunk and transfer on 4Kx4K boundaries.
+						//
+						/////////////////////////////////////////////////////////////////////////////////
+
+						var noMSfix= (location.search.toUpperCase()=='?NOMSFIX')
+
+						if (((nw<=4096)&&(nh<=4096)) || (!document.styleSheets[0].cssText) || noMSfix){
+
+							source= context.getImageData(0,0,nw,nh)
+							sourceData= source.data
+						}else{
+							var wd= Math.ceil(nw/4096)
+							var wr= (nw%4096) || 4096
+
+							var hd= Math.ceil(nh/4096)
+							var hr= (nh%4096) || 4096
+
+							var nw4= nw*4
+
+							for (var h=0; h<hd; h++){
+								var hulc= h*4096
+								var hsiz= (h==hd-1)?hr:4096
+
+								for (var w=0; w<wd; w++){
+									var wulc= w*4096
+									var wsiz= (w==wd-1)?wr:4096
+
+									var wsiz4= wsiz*4
+									var hsizwsiz4= hsiz*wsiz4
+
+									if ((w==0)&&(h==0)){					// note: context.drawImage(img,0,0) already called for this first section (and clipped at 4096x4096)
+										source= context.getImageData( 0,0,nw,nh )
+										sourceData= source.data
+									}else{
+										context.drawImage(img, wulc,hulc,wsiz,hsiz, 0,0,wsiz,hsiz)
+
+										var tmp= context.getImageData( 0,0,wsiz,hsiz )
+										var tmpData=tmp.data
+
+										for (var rt=0,rs=hulc*nw4; rt<hsizwsiz4; rt+=wsiz4,rs+=nw4){
+											var rtwsiz4= rt+wsiz4
+											for (var ct=rt, cs=rs+wulc*4; ct< rtwsiz4; ct+=4, cs+=4){
+												sourceData[cs+0]=tmpData[ct+0]
+												sourceData[cs+1]=tmpData[ct+1]
+												sourceData[cs+2]=tmpData[ct+2]
+												sourceData[cs+3]=tmpData[ct+3]
+											}
+										}
+									}
+								}
+							}
+							tmp= tmpData= null		// explicitly release for garbage collection, it could be 4Kx4Kx4= 64MB
+						}
+						/////////////////////////////////////////////////////////////////////////////////
+
+						var nwnh4= nw*nh*4
+
+						source.bw= true						// sniff -b&w- vs color
+						for (var i=0; i<nwnh4; i+=4){
+							if	((sourceData[i+3]) &&
+								((sourceData[i+0]!= sourceData[i+1]) || (sourceData[i+1]!=sourceData[i+2]))){
+									source.bw= false
+									break
+							}
+						}
+						source.preloadtime= new Date() -t0
+						rb2UnDisabledRdy()					// finally, remove "disabled" from [rb2]
+						ondropRdy()
+					}
+					onresizeRdy()							// here is where "img" actually gets displayed first time (or queued for window.onload)
+					setTimeout( prefetchSource,250 )				// this setTimeout give brief exit, allows the image to be drawn, before prefetch stalls the thread
+				}else{
+					onresizeRdy()
+					ondropRdy()
+				}
+			}
+		}
+		function ondropRdy(){
+			ondropRdy= function(){
+				document.documentElement.ondragenter=					// IE8 doesn't fire document.ondragxxx
+				document.documentElement.ondragover=
+					function(evt){
+						evt= evt||window.event||({})
+						evt.stopPropagation && evt.stopPropagation()
+						evt.preventDefault && evt.preventDefault()
+						return ( evt.returnValue= false )
+					}
+				document.documentElement.ondrop=
+					function(evt){
+						evt= evt||window.event
+						this.ondragover(evt)
+
+						var dt= evt.dataTransfer, dropfile, CORS
+						if (!dt) return false
+
+						if (dropfile= window.URL && dt.files && dt.files[0]){
+							CORS= false
+							if ( (/^image\//i).test(dropfile.type) )
+								dropfile= URL.createObjectURL(dropfile)
+							else return false
+						}else{
+							CORS= true
+							try{								// IE throws on "text/plain"
+							dropfile=/*encodeURI*/(	(dt.getData('URL')        ||		// hmm. percent-encode it ?
+										 dt.getData('text')       ||
+										 dt.getData('text/plain') ||
+										 "").match(/^https?:\/\/\S+|^file:\S+/i)
+										)
+										}catch(e){/*( IE throws on text/plain )*/}
+							if (!dropfile) return false
+						}
+
+						clearTimeout( rbShowImg.timerID )
+						rb2.parentNode.className="normal"
+						showtime.className="absent"
+						//showtime.title=""
+						//source.preloadtime= null
+						onresize= null
+						this.ondrop= null
+
+						//rb0.checked= false
+						//rb2.checked= false
+						rb1.checked= true
+
+						rb0.disabled= false
+						rb1.disabled= false
+						rb2.disabled= true
+
+						if (canvas) canvas.oncontextmenu= null
+
+						var L= img.onload				// CHROME: for SVG, in order to get new img.width/height = new img.naturalWidth/Height, need NEW img element.
+						var E= img.onerror				//           else old img.width/height stick, and apply to new SVG image.  humph.
+						imgdiv.innerHTML=""
+						imgdiv.className=""
+						img= document.createElement("img")
+						img.onload=  L
+						img.onerror= E
+						if (CORS) img.crossOrigin="anonymous"
+
+						try{ img.src= dropfile }			// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.  humph.
+						catch(e){ img.onerror(e) }
+
+						return false
+					}
+			}
+		}
+		function imgOnerrorRdy(evt){
+			var firstEvt= evt||window.event
+			imgOnerrorRdy= function(evt){
+				imgOnerrorRdy= function(evt){				// by def:  callback OnErrorEventHandler( message,filename,lineno,colno,error )
+											// whereas: object   ErrorEvent= { message:, filename:, lineno:, colno:, error: }
+					var message					// ondrop passes an ErrorEvent object here in evt, instead of the callback domstring
+											// onload fabricates a message (for zero dimension imagefile) and passes it in array, to distinguish it from "real" onerror
+					evt= evt||window.event
+
+					if (typeof(evt)=='object'){
+						message= evt.message
+						if (!message){
+							message= ({}).toString.call(evt).match(/(\S*)]|$/)[1]+" "+String(evt.type)	//      [object ???Event]  evt.type
+							if (message=='Event error') message=""						// duh  [object Event]     evt.type=error
+						}
+					}else	message= evt
+
+					if (evt instanceof Array)			// message from this script:  display as-is
+						message= evt[0]				//
+					else if (message)				// message from browser:  quote it
+						message= '"'+message+'"'		//
+					else	message= '***Image Load Error***'	// no message?  show generic
+
+					imgdiv.innerHTML= message
+					imgdiv.style.width= imgdiv.style.height=""
+					imgdiv.className="imgerr"
+
+					rb0.checked=
+					rb1.checked=
+					window.rb2.checked= false
+
+					rb0.disabled=
+					rb1.disabled=
+					window.rb2.disabled= true
+				}
+				imgOnerrorRdy(evt||window.event||firstEvt)
+			}
+		}
+		img.onerror=	function(evt){
+					evt= evt||window.event
+
+					if (img.src.substr(0,5)=='blob:') URL.revokeObjectURL(img.src)
+					imgOnerrorRdy(evt)
+					ondropRdy()
+				}
+
+		img.src= initial_IMG_url
+
+
+		function rb2UnDisabledRdy(){
+			rb2UnDisabledRdy= function(){
+				window.rb2.disabled= false
+				showtimetxt.title="prior onetime preload: "+source.preloadtime+" ms"
+			}
+		}
+
+		function onresizeRdy(){
+			onresizeRdy= function(){
+
+				function hideScrollBarsIfNotIE8(){ viewport.style.overflow="hidden" }
+															// get imgdiv  MIN-WIDTH MIN-HEIGHT  values from stylesheet
+				if ('getComputedStyle' in window)							//
+					var gcs= getComputedStyle(imgdiv)						//
+															//
+				else{	hideScrollBarsIfNotIE8= function(){}						// IE8   DO NOT set "hidden".  it triggers another resize event  (infinitely, if rb.onclick was ever fired previously)
+					for (var i=0, gcs; !gcs; i++)							// IE8
+						if (/#imgdiv/.test(document.styleSheets[0].rules[i].selectorText))	// IE8   ms-proprietary .rules instead of w3-standards .cssRules
+							gcs= document.styleSheets[0].rules[i].style			// IE8
+				}											//
+				imgdiv.minW= parseInt(gcs.minWidth)							//
+				imgdiv.minH= parseInt(gcs.minHeight)							//
+
+				onresize= function(evt){
+					var s= viewport.style.overflow
+					hideScrollBarsIfNotIE8()
+					var rect= viewport.getBoundingClientRect()
+					var W= rect.right-rect.left -imgdiv.marLeft
+					var H= rect.bottom-rect.top
+					viewport.style.overflow= s
+
+					if (W<imgdiv.minW)  W= imgdiv.minW
+					if (H<imgdiv.minH)  H= imgdiv.minH
+
+					imgdiv.W= W
+					imgdiv.H= H
+					rbShowImg(evt)
+				}
+				onresize()
+			}
+		}
+		function rbShowImg(evt){
+
+			evt= evt||window.event
+
+			clearTimeout( rbShowImg.timerID )
+
+			if (evt && evt.type && (evt.type=='resize'))
+				var delay= 350
+			else	var delay= 0
+
+			if (!window.rb2.checked)
+				rbShowImg.timerID= setTimeout( rbShowImgGo,delay )
+			else 
+				rbShowImg.timerID= setTimeout(
+					function(){
+						rb2.parentNode.className="dim"				// apply dim to [rb2] label container
+						if (showtime.className=='present')			// and   dim [showtime] field beneath it
+							showtime.className='presentdim'
+						rbShowImg.timerID= setTimeout( rbShowImgGo,25 )		// CHROME needs around 25ms here to reliably apply the grey.
+					},delay )
+		}
+		function rbShowImgGo(){
+
+			var w= img.intrinsicWidth
+			var h= img.intrinsicHeight
+
+			if (!(w&&h)) return
+
+			while (imgdiv.firstChild) imgdiv.removeChild(imgdiv.firstChild)
+
+			if (!rb0.checked){
+				if ((w>imgdiv.W)||(h>imgdiv.H)){		// shrink
+
+					if ((h/imgdiv.H)>=(w/imgdiv.W)){
+
+						w= (imgdiv.H*w)/h
+						h= imgdiv.H
+					}else{
+						h= (imgdiv.W*h)/w
+						w= imgdiv.W
+					}
+
+				}else if ((w<imgdiv.W)&&(h<imgdiv.H)){		// expand
+
+					if ((imgdiv.H/h)<=(imgdiv.W/w)){
+
+						w= (imgdiv.H*w)/h
+						h= imgdiv.H
+					}else{
+						h= (imgdiv.W*h)/w
+						w= imgdiv.W
+					}
+				}
+			}
+			imgdiv.style.width=  w+"px"
+			imgdiv.style.height= h+"px"
+
+			if (!window.rb2.checked){		// rb0=Original Size   rb1=Fit View (no smoothing)
+				img.width=  w
+				img.height= h
+				imgdiv.appendChild(img)
+			}else{					// rb2=Fit View and Smooth
+
+
+				///////////////////////////
+				//                       //
+				//  Do the canvas thing  //
+				//                       //
+				///////////////////////////
+
+				canvas.oncontextmenu= null
+
+
+				var nw= source.width
+				var nh= source.height
+
+				var cw= Math.floor(w)
+				var ch= Math.floor(h)
+
+				var t0= +new Date()
+
+				if ((nw<cw) || (nh<ch)){							// expand
+
+					//var dest= reduceByFactor( source,source.width,source.height )		// smooth first, then expand, is too blurry
+					//dest.bw= source.bw							//
+					//dest= expandByFactor( dest,cw,ch )					//
+
+					var dest= expandByFactor( source,cw,ch )				// expand first, then smooth, is better    (two-steps, for best bw halftones)
+					if (source.bw){								// ehh.  skip smoothing if color.
+						dest.bw= source.bw						//
+						dest= reduceByFactor( dest,cw,ch )				//
+					}									//
+
+				}else	var dest= reduceByFactor( source,cw,ch )				// shrink
+
+				canvas.width=  dest.width
+				canvas.height= dest.height
+				context.putImageData(dest,0,0)
+				imgdiv.appendChild(canvas)
+
+				showtimetxt.innerHTML= (new Date()-t0) +" ms"
+														// this is being done like this just to get a kissy-looking fadein.
+				showtime.className="presentdim"							// CHROME needs unconditional setTimeout wrapper, else sporadically gives 0s transition (during resize)
+				setTimeout( function(){
+						rb2.parentNode.className="normal"				// IE9 - this MUST go first, else intermittently won't return to "normal".  not a clue why order fixes it.
+						showtime.className="present"
+						//rb2.parentNode.className="normal"
+						},0 )
+
+				/*if (document.styleSheets[0].cssText)*/					// only MS-BROWSER does NOT provide right-click SaveAs for canvas
+					canvas.oncontextmenu= canvasDownload					// --- but do this for Firefox and Chrome too, to get customized default filename (image-WxH)
+			}
+			function canvasDownload(evt){
+
+				if ((evt.button==2) && (window.Blob) &&
+					(('download' in window.HTMLAnchorElement.prototype) || ('msSaveBlob' in navigator)) &&
+					 confirm("Would you like to save this image?")){
+
+					if (!canvas.toBlob){											// neither IE nor Chrome do canvas.toBlob()
+						canvas.toBlob= function(callback){
+									var dataURL= canvas.toDataURL()
+									var dataA= dataURL.match(/^data:image\/png;base64,([\s\S]*)|$/i)[1]
+									if (dataA){
+										var dataB= atob( dataA )
+										var arrayBuff= new Uint8Array( dataB.length )
+										for (var i=0; i<dataB.length; i++ ) arrayBuff[i]= dataB.charCodeAt(i)
+										var blob= new Blob( [ arrayBuff ], {type:"image/png"} )
+										callback(blob)
+									}
+								}
+					}
+					var filename= "image-" + canvas.width +"x"+ canvas.height + ".png"
+
+					if ('download' in window.HTMLAnchorElement.prototype){					// msEDGE implements a.download  (and continues to have navigator.msSaveBlob)
+						var a= document.createElement("a")						//
+						a.download= filename								// msEDGE does NOT honor this proposed default filename
+						a.className= "offscreen"							// FIREFOX
+						document.body.appendChild(a)							// FIREFOX won't perform a.click() unless appended into DOM
+						canvas.toBlob( function(blob){							//
+									a.href= URL.createObjectURL(blob)			//
+									a.click()						//
+									document.body.removeChild(a)				// FIREFOX
+									//URL.revokeObjectURL(a.href)				// URL.revoke  causes msEDGE to fail   (Chrome ok)
+									})							//
+					}
+					else	canvas.toBlob( function(blob){ navigator.msSaveBlob( blob,filename )} )		// https://msdn.microsoft.com/en-us/library/hh772331(v=vs.85).aspx
+																// var retVal = navigator.msSaveBlob(blob, defaultName)
+					evt.preventDefault()
+					return false
+				}
+			}
+			function reduceByFactor( source,cw,ch ){
+
+				var sourceData= source.data
+				var srcW= source.width
+				var srcH= source.height
+				var srcW4= srcW*4
+
+				var dest= context.createImageData( Math.floor(cw),Math.floor(ch) )
+				var destData= dest.data
+				var dstW= dest.width
+				var dstH= dest.height
+				var dstW4= dstW*4
+
+				var dstW1= dstW-1
+				var dstH1= dstH-1
+
+				var ratioW= srcW/dstW
+				var ratioH= srcH/dstH
+
+				function computeA( x,ratioW,Ax ){
+
+					var ratioW_p5 = ratioW +0.5
+					var ratioW_m5 = ratioW -0.5
+					var ratioW1   = ratioW -1
+
+					var ratioW_mL   = ratioW - lambda
+					var ratioW_m1L  = ratioW -(1+lambda)
+
+					var xLft= x-ratioW_mL				// note:  may be negative  (top,left)
+					var xLftFrac= Math.ceil(xLft) - xLft
+
+					Ax.tlc= Math.floor(xLft)			// top left corner coord
+
+
+					var u
+
+					if (xLftFrac >= ratioW_mL){
+
+						Ax.push( ratioW_mL * (ratioW - (ratioW_mL/2)) )
+						u= xLftFrac-ratioW_mL
+						Ax[Ax.length-1] += (u * (ratioW- (u/2))	)
+					}else{
+						u= ratioW_mL
+
+						if (xLftFrac>0){
+
+							Ax.push( xLftFrac * (lambda+(xLftFrac/2)) )
+							u -= xLftFrac
+						}
+						while (u >= 1){
+							Ax.push( ratioW_p5 - u )
+							u -= 1
+						}
+						if (u>0){
+							if (1-u >= ratioW_mL){
+
+								Ax.push( u * (ratioW - (u/2)) )
+								Ax[Ax.length-1] += ( ratioW_mL * (ratioW-(ratioW_mL/2)) )
+								//u= ratioW_mL
+								return Ax
+							}else{						//Ax.push( u * (ratioW - (u/2)) )  plus
+								Ax.push( ratioW_m5 + u - u*u )		//Ax[Ax.length-1] += ( (1-u) * (ratioW - ((1-u)/2)) )
+								u= 1-u
+							}
+						}							// ( only FP inaccuracy could possibly cause u<0 here... )
+						while (u <= ratioW_m1L){
+							Ax.push( ratioW_m5 - u )
+							u += 1
+						}
+					}
+					u= ratioW_mL-u
+					if (u>0){
+						Ax.push( u * (lambda+(u/2)) )
+					}
+					return Ax
+				}
+
+				function computeAQ( x,ratioW,Ax ){
+
+					var xLft= x-ratioW				// note:  may be negative  (top,left)
+					var xLftFrac= Math.ceil(xLft) - xLft
+
+					Ax.tlc= Math.floor(xLft)			// top left corner coord
+
+					var ratioW1= ratioW -1
+
+					function getQuad(ub){
+
+						var ub3,ub4
+
+						ub /= ratioW
+						ub3= ub*ub*ub
+						ub4= ub3*ub/2
+
+						return (ub4-ub3+ub)
+					}
+
+					var u= ratioW
+					var uW= ub= /*getQuad(u)*/ 1/2, ua
+
+					if (xLftFrac){
+
+						u -= xLftFrac
+						ua= getQuad(u)
+						Ax.push(ub-ua)
+						ub= ua
+					}
+					while (u >= 1){
+
+						u -= 1
+						ua= getQuad(u)
+						Ax.push(ub-ua)
+						ub= ua
+					}
+					if (u>0){					//Ax.push( u * (ratioW - (u/2)) )  plus
+											//Ax[Ax.length-1] += ( (1-u) * (ratioW - ((1-u)/2)) )
+						Ax.push( ub )
+						u= 1-u
+						ub= getQuad(u)
+						Ax[Ax.length-1] += ub
+
+					}else	u= ub= 0				// ( only FP inaccuracy could possibly cause u<0 here... )
+
+					while (u <= ratioW1){
+
+						u += 1
+						ua= getQuad(u)
+						Ax.push(ua-ub)
+						ub= ua
+					}
+					if (u<ratioW){
+
+						Ax.push(uW-ub)
+					}
+					return Ax
+				}
+
+				var quad= location.search.toUpperCase()=='?QUADRATURE'
+				var linear= location.search.match(/^\?LINEAR(=(\d*\.?\d*)?)?$/i) || false
+				var lambda= 0									// lambda= 0.0 for midpoint to neighbor-midpoint   (more smoothing)
+				if (linear){									// lambda= 0.5 for midpoint to neighbor-edge       (less smoothing)
+					lambda= parseFloat(linear[2]) || 0
+					if (lambda > 0.5) lambda= 0
+					linear= true
+				}
+				var denom= (ratioW*ratioW -lambda*lambda) * (ratioH*ratioH -lambda*lambda)
+
+				if (quad || (!linear && !source.bw)){
+					computeA= computeAQ
+					denom= 1
+				}
+
+
+				var srcH_ratioH= Math.min( srcH-ratioH, (dstH-1)*ratioH )		// these would be identically same, except for FP inaccuracy
+				var srcW_ratioW= Math.min( srcW-ratioW, (dstW-1)*ratioW )		//
+
+				var Ax=[], AAx=[],  Ay=[]
+
+
+				for (var dstY=0, dstY4=0; dstY<dstH; dstY4+=dstW4, dstY++){
+
+					var srcY= (dstY+0.5)*ratioH
+
+					Ay= computeA( srcY,ratioH,[] )
+
+					while (Ay.tlc < 0){						// fixup top
+						Ay[1] += Ay[0]
+						Ay.shift()
+						Ay.tlc++
+					}
+					while ((Ay.tlc + Ay.length) > srcH){				// fixup bottom
+						Ay[Ay.length-2] += Ay[Ay.length-1]
+						Ay.pop()
+					}
+
+					var Aysiz= Ay.length
+
+					var srcTop= Ay.tlc*srcW4
+
+
+					for (var dstX=0, dstX4=dstY4; dstX<dstW; dstX4+=4, dstX++){
+
+						if (dstY==0){
+							var srcX= (dstX+0.5)*ratioW
+
+							Ax= computeA( srcX,ratioW,[] )
+
+							while (Ax.tlc < 0){				// fixup left
+								Ax[1] += Ax[0]
+								Ax.shift()
+								Ax.tlc++
+							}
+							while ((Ax.tlc + Ax.length) > srcW){		// fixup right
+								Ax[Ax.length-2] += Ax[Ax.length-1]
+								Ax.pop()
+							}
+
+							Ax.tlc *= 4
+							AAx.push( Ax )
+						}else
+							Ax= AAx[ dstX ]
+
+						var Axsiz= Ax.length
+
+						var srcTopLeft= srcTop + Ax.tlc
+
+
+						if (!source.bw){
+
+							var rr= gg= bb= aa= NRG= 0
+							var rrr,ggg,bbb
+
+							for (var r=0, wtRow=srcTopLeft; r<Aysiz; wtRow+=srcW4, r++){
+								var Ayr= Ay[r]
+								for (var c=0, wtCell=wtRow; c<Axsiz; wtCell+=4, c++){
+									aa+= aaa= sourceData[wtCell+3] * Ax[c] * Ayr
+									rr+= rrr= sourceData[wtCell+0] * aaa
+									gg+= ggg= sourceData[wtCell+1] * aaa
+									bb+= bbb= sourceData[wtCell+2] * aaa
+									NRG+= Math.sqrt( rrr*rrr + ggg*ggg + bbb*bbb )
+								}
+							}
+							destData[ dstX4+3 ] = aa/denom
+
+							if (NRG){				// note.  if NRG !=0  then aa !=0
+								var wrkF = NRG / (aa * Math.sqrt( rr*rr + gg*gg + bb*bb ))
+								destData[ dstX4+0 ]= rr * wrkF
+								destData[ dstX4+1 ]= gg * wrkF
+								destData[ dstX4+2 ]= bb * wrkF
+		//					}else{
+		//						destData[ dstX4+0 ]=
+		// initial value is already zero		destData[ dstX4+1 ]=
+		//						destData[ dstX4+2 ]= 0
+							}
+						}else{
+							var rr= aa= 0
+							var aaa
+
+							for (var r=0, wtRow=srcTopLeft; r<Aysiz; wtRow+=srcW4, r++){
+								var Ayr= Ay[r]
+								for (var c=0, wtCell=wtRow; c<Axsiz; wtCell+=4, c++){
+									aa+= aaa= sourceData[wtCell+3] * Ax[c] * Ayr
+									rr+= sourceData[wtCell+0] * aaa
+								}
+							}
+							destData[ dstX4+3 ] = aa/denom
+
+							if (aa){
+								destData[ dstX4+0 ]=
+								destData[ dstX4+1 ]=
+								destData[ dstX4+2 ]= rr/aa
+		//					}else{
+		//						destData[ dstX4+0 ]=
+		// initial value is already zero		destData[ dstX4+1 ]=
+		//						destData[ dstX4+2 ]= 0
+							}
+						}
+					}
+				}
+				return dest
+			}
+
+			function expandByFactor( source,cw,ch ){
+
+				var sourceData= source.data
+				var srcW= source.width
+				var srcH= source.height
+				var srcW4= srcW*4
+
+				var srcW1= srcW-1
+				var srcH1= srcH-1
+
+				var dest= context.createImageData( Math.floor(cw),Math.floor(ch) )
+				var destData= dest.data
+				var dstW= dest.width
+				var dstH= dest.height
+				var dstW4= dstW*4
+
+				var dstW1= dstW-1
+				var dstH1= dstH-1
+
+				var srcH05= srcH -0.5
+				var srcW05= srcW -0.5
+
+				var ratioW= dstW/srcW
+				var ratioH= dstH/srcH
+
+				var Ax=[], Axd12
+
+				for (var dstY=0, dstY4=0; dstY<dstH; dstY4+=dstW4, dstY++){
+
+					var srcY= Math.min( srcH05, (dstY+0.5)/ratioH )
+					var srcYfloor= Math.floor(srcY)
+					var srcYmidpoint= srcYfloor+0.5
+
+					var srcY1,srcY2, srcDY,src1_DY
+
+					if (srcY <= srcYmidpoint){
+
+						src1_DY= srcYmidpoint-srcY
+						srcDY= 1-src1_DY
+
+						srcY2= srcYfloor *srcW4
+						if (srcYfloor > 0)
+							srcY1= srcY2 - srcW4
+						else	srcY1= 0
+					}else{
+						srcDY= srcY-srcYmidpoint
+						src1_DY= 1-srcDY
+
+						srcY1= srcYfloor *srcW4
+						if (srcYfloor < srcH1)
+							srcY2= srcY1 + srcW4
+						else	srcY2= srcY1
+					}
+
+					for (var dstX=0, dstX4=dstY4; dstX<dstW; dstX4+=4, dstX++){
+
+						var srcX1,srcX2, srcDX
+
+						if (dstY==0){
+							var srcX= Math.min( srcW05, (dstX+0.5)/ratioW)
+							var srcXfloor= Math.floor(srcX)
+							var srcXmidpoint= srcXfloor+0.5
+
+							if (srcX <= srcXmidpoint){
+								srcDX= 1- (srcXmidpoint-srcX)
+
+								srcX2= srcXfloor *4
+								if (srcXfloor > 0)
+									srcX1= srcX2 -4
+								else	srcX1= 0
+							}else{
+								srcDX= srcX-srcXmidpoint
+
+								srcX1= srcXfloor *4
+								if (srcXfloor < srcW1)
+									srcX2= srcX1 +4
+								else	srcX2= srcX1
+							}
+							Ax.push([srcDX,srcX1,srcX2])
+						}else{
+							Axd12= Ax[dstX]
+							srcDX= Axd12[0]
+							srcX1= Axd12[1]
+							srcX2= Axd12[2]
+						}
+						var x1_y1= srcX1+srcY1
+						var x2_y1= srcX2+srcY1
+						var x1_y2= srcX1+srcY2
+						var x2_y2= srcX2+srcY2
+
+						var a_x1_y1 = sourceData[x1_y1 +3]
+						var a_x2_y1 = sourceData[x2_y1 +3]
+						var a_x1_y2 = sourceData[x1_y2 +3]
+						var a_x2_y2 = sourceData[x2_y2 +3]
+
+						var aa=	(a_x1_y1 + (a_x2_y1-a_x1_y1)*srcDX )*src1_DY +
+							(a_x1_y2 + (a_x2_y2-a_x1_y2)*srcDX )*srcDY
+
+						destData[ dstX4+3 ]= aa
+
+						if (aa > 0){
+
+							if (!source.bw){
+
+								var rr_x1_y1= sourceData[x1_y1 +0]*a_x1_y1
+								var rr_x2_y1= sourceData[x2_y1 +0]*a_x2_y1
+								var rr_x1_y2= sourceData[x1_y2 +0]*a_x1_y2
+								var rr_x2_y2= sourceData[x2_y2 +0]*a_x2_y2
+
+								var rr= (rr_x1_y1 + (rr_x2_y1 - rr_x1_y1 )*srcDX )*src1_DY +
+									(rr_x1_y2 + (rr_x2_y2 - rr_x1_y2 )*srcDX )*srcDY
+
+								var gg_x1_y1= sourceData[x1_y1 +1]*a_x1_y1
+								var gg_x2_y1= sourceData[x2_y1 +1]*a_x2_y1
+								var gg_x1_y2= sourceData[x1_y2 +1]*a_x1_y2
+								var gg_x2_y2= sourceData[x2_y2 +1]*a_x2_y2
+
+								var gg= (gg_x1_y1 + (gg_x2_y1 - gg_x1_y1 )*srcDX )*src1_DY +
+									(gg_x1_y2 + (gg_x2_y2 - gg_x1_y2 )*srcDX )*srcDY
+
+								var bb_x1_y1= sourceData[x1_y1 +2]*a_x1_y1
+								var bb_x2_y1= sourceData[x2_y1 +2]*a_x2_y1
+								var bb_x1_y2= sourceData[x1_y2 +2]*a_x1_y2
+								var bb_x2_y2= sourceData[x2_y2 +2]*a_x2_y2
+
+								var bb= (bb_x1_y1 + (bb_x2_y1 - bb_x1_y1 )*srcDX )*src1_DY +
+									(bb_x1_y2 + (bb_x2_y2 - bb_x1_y2 )*srcDX )*srcDY
+
+
+								var NRG_x1_y1= Math.sqrt( rr_x1_y1*rr_x1_y1 + gg_x1_y1*gg_x1_y1 + bb_x1_y1*bb_x1_y1 )
+								var NRG_x2_y1= Math.sqrt( rr_x2_y1*rr_x2_y1 + gg_x2_y1*gg_x2_y1 + bb_x2_y1*bb_x2_y1 )
+								var NRG_x1_y2= Math.sqrt( rr_x1_y2*rr_x1_y2 + gg_x1_y2*gg_x1_y2 + bb_x1_y2*bb_x1_y2 )
+								var NRG_x2_y2= Math.sqrt( rr_x2_y2*rr_x2_y2 + gg_x2_y2*gg_x2_y2 + bb_x2_y2*bb_x2_y2 )
+
+								var NRG= (NRG_x1_y1 + (NRG_x2_y1 - NRG_x1_y1 )*srcDX )*src1_DY +
+									 (NRG_x1_y2 + (NRG_x2_y2 - NRG_x1_y2 )*srcDX )*srcDY
+
+
+								var wrkF = NRG / (aa * Math.sqrt( rr*rr + gg*gg + bb*bb ))
+								destData[ dstX4+0 ]= rr * wrkF
+								destData[ dstX4+1 ]= gg * wrkF
+								destData[ dstX4+2 ]= bb * wrkF
+							}else{
+								var rr_x1_y1= sourceData[x1_y1 +0]*a_x1_y1
+								var rr_x2_y1= sourceData[x2_y1 +0]*a_x2_y1
+								var rr_x1_y2= sourceData[x1_y2 +0]*a_x1_y2
+								var rr_x2_y2= sourceData[x2_y2 +0]*a_x2_y2
+
+								var rr= ( (rr_x1_y1 + (rr_x2_y1 - rr_x1_y1 )*srcDX )*src1_DY +
+									  (rr_x1_y2 + (rr_x2_y2 - rr_x1_y2 )*srcDX )*srcDY
+									) / aa
+
+								destData[ dstX4+0 ]=
+								destData[ dstX4+1 ]=
+								destData[ dstX4+2 ]= rr
+							}
+		//				}else{
+		//					destData[ dstX4+0 ]=
+		// initial value is already zero	destData[ dstX4+1 ]=
+		//					destData[ dstX4+2 ]= 0
+						}
+					}
+				}
+				return dest
+			}
+		}
+	</script>
+</head>
+<body>
+	<div id=viewport>
+
+		<div id=btnbox>
+			<label><input id=rb0 type=radio name=rbgroup><span class=rbspan>Original size</span></label>
+			<label><input id=rb1 type=radio name=rbgroup><span class=rbspan>Fit view</span></label>
+			<label><input id=rb2 type=radio name=rbgroup disabled><span class=rbspan>Fit and smooth</span></label>
+			<span id=showtime class=absent><span id=showtimetxt></span></span>
+		</div>
+
+		<div id=imgdiv></div>
+
+	</div>
+</body>
+</html>
