@@ -1,0 +1,61 @@
+<!doctype html>
+	<meta charset=utf-8>
+	<title>smooth img with canvas</title>
+
+	<!-- =========================================================================================== -->
+	<!-- https://social.msdn.microsoft.com/Forums/en-US/5d1c8106-5697-4d04-8da0-301e45b8037f/        -->
+	<!-- poor-image-quality-in-ie                                                                    -->
+	<!--                                                                                             -->
+	<!-- https://social.technet.microsoft.com/Forums/ie/en-US/e800cbaf-a539-43ba-b5f9-1d29fe709ddc/  -->
+	<!-- the-awful-internet-explorer-image-renderengine#b8b49cb3-250c-43f4-a0d5-1712d9e2bf01         -->
+	<!-- (ItSurfer)                                                                                  -->
+	<!-- =========================================================================================== -->
+
+	<style> .w100xh100{ width:100px; height:100px } img+img,span{ margin-left:2em } </style>
+
+	<img class=w100xh100 alt=circles src=circles.png>
+	<img class=w100xh100 alt=circles src=circles.png  onload=smooth(this)>
+	<span>500px, scale down</span>
+	<br>
+	<br>
+	<img src=triangle.png alt=triangle>
+	<img src=triangle.png alt=triangle onload=smooth(this)>
+	<span>100px, no scaling</span>
+
+	<script>
+		var SMOOTH= location.search.toUpperCase()=="?ALL" || document.focus		// all browsers, else  document.focus==msBrowser
+
+		function smooth(img){
+
+			if (img.naturalWidth>=img.width && SMOOTH){
+				var t0= +Date.now()
+
+				var c= [ document.createElement("canvas"), document.createElement("canvas") ]
+				c[0]= [c[0],c[0].getContext('2d')]
+				c[1]= [c[1],c[1].getContext('2d')]
+
+				c[1][0].width=  img.naturalWidth
+				c[1][0].height= img.naturalHeight
+				c[1][1].drawImage(img,0,0)
+
+				var factor= .8
+
+				if (img.naturalWidth==img.width){
+					c[0][0].width=  img.width-1
+					c[0][0].height= img.height-1
+					c[0][1].drawImage(c[1][0], 0,0,c[0][0].width,c[0][0].height)
+					c[1][1].drawImage(c[0][0], 0,0,c[1][0].width,c[1][0].height)
+				}else do{
+					c.push(c.shift())
+					c[1][0].width=  (factor*c[0][0].width>img.width?   factor*c[0][0].width:  img.width)
+					c[1][0].height= (factor*c[0][0].height>img.height? factor*c[0][0].height: img.height)
+					c[1][1].drawImage(c[0][0], 0,0,c[1][0].width,c[1][0].height)
+				}while(c[1][0].width>img.width)
+
+				img.onload= null
+				img.src= c[1][0].toDataURL()
+
+				img.nextElementSibling.innerHTML+= (" &bull; " + (Date.now()-t0)+" ms")
+			}
+		}
+	</script>
