@@ -41,15 +41,15 @@
 					c[1].canvas.height= img.height
 					c[1].drawImage(c[0].canvas, 0,0,c[1].canvas.width,c[1].canvas.height)
 				}else{
-					var f, factor=.8
-					c[1].canvas.width=  img.naturalWidth
-					c[1].canvas.height= img.naturalHeight
+					var w=img.naturalWidth, h=img.naturalHeight, factor=.8
+					c[1].canvas.width=  w
+					c[1].canvas.height= h
 					c[1].drawImage(img,0,0)
 					do{	c.push(c.shift())
-						c[1].canvas.width=  ((f= factor*c[0].canvas.width)  >img.width?  f: img.width)
-						c[1].canvas.height= ((f= factor*c[0].canvas.height) >img.height? f: img.height)
+						c[1].canvas.width=  ((w*=factor) >img.width?  w: img.width)
+						c[1].canvas.height= ((h*=factor) >img.height? h: img.height)
 						c[1].drawImage(c[0].canvas, 0,0,c[1].canvas.width,c[1].canvas.height)
-					}while(c[1].canvas.width>img.width)
+					}while( c[1].canvas.width>img.width || c[1].canvas.height>img.height )
 				}
 				img.onload= null
 				img.src= c[1].canvas.toDataURL()
