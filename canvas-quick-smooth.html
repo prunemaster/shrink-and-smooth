@@ -42,13 +42,13 @@
 					c[1][0].height= img.height
 					c[1][1].drawImage(c[0][0], 0,0,c[1][0].width,c[1][0].height)
 				}else{
-					var factor= .8
+					var f, factor=.8
 					c[1][0].width=  img.naturalWidth
 					c[1][0].height= img.naturalHeight
 					c[1][1].drawImage(img,0,0)
 					do{	c.push(c.shift())
-						c[1][0].width=  (factor*c[0][0].width>img.width?   factor*c[0][0].width:  img.width)
-						c[1][0].height= (factor*c[0][0].height>img.height? factor*c[0][0].height: img.height)
+						c[1][0].width=  ((f= factor*c[0][0].width)  >img.width?  f: img.width)
+						c[1][0].height= ((f= factor*c[0][0].height) >img.height? f: img.height)
 						c[1][1].drawImage(c[0][0], 0,0,c[1][0].width,c[1][0].height)
 					}while(c[1][0].width>img.width)
 				}
