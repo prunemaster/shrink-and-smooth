@@ -1,0 +1,70 @@
+<!doctype html>
+	<meta charset=utf-8>
+	<title> scaledown quality </title>
+
+	<!-- =========================================================================================== -->
+	<!-- https://social.msdn.microsoft.com/Forums/en-US/5d1c8106-5697-4d04-8da0-301e45b8037f/        -->
+	<!-- poor-image-quality-in-ie                                                                    -->
+	<!--                                                                                             -->
+	<!-- https://social.technet.microsoft.com/Forums/ie/en-US/e800cbaf-a539-43ba-b5f9-1d29fe709ddc/  -->
+	<!-- the-awful-internet-explorer-image-renderengine#b8b49cb3-250c-43f4-a0d5-1712d9e2bf01         -->
+	<!-- (ItSurfer)                                                                                  -->
+	<!-- =========================================================================================== -->
+	<!--                                                                                             -->
+	<!-- IE8 was smooth.  But there's no IE11-quickfix with Compatibility View or Enterprise Mode.   -->
+	<!--                                                                                             -->
+	<!-- https://social.technet.microsoft.com/Forums/ie/en-US/1a0f97af-105b-4e26-93f5-37915d74b15d/  -->
+	<!-- can-we-downgrade-ie-from-11-to-ie-9-in-windows-10                                           -->
+	<!--                                                                                             -->
+	<!-- =========================================================================================== -->
+
+	<style> *{ font-family:'Segoe UI',sans-serif; font-size:12pt } </style>
+
+	<p>Current scale <span id=info></span></p>
+
+	<input id=INPUT type=range step=1 min=0 max=100 value=20
+		oninput="(oninput=onchange)(); onchange=null"
+		onchange="info.innerHTML=value+'%'; window.IMG.resize(value)">		<!-- chrome bug.  need window prefix on IMG in inline event handler -->
+
+	<script>
+		if (INPUT.type=="text"){
+			info.parentNode.innerHTML="Enter 0-100%"
+			INPUT.outerHTML= '<input id=INPUT onchange=IMG.resize(value) onkeypress="X">'
+						.replace("X",[	"var k=event.charCode||event.keyCode",
+								"if (k=='\\r'.charCodeAt(0)) onchange()",
+								"else return value+String.fromCharCode(k) <= 100"
+								].join(" \n") )
+		}
+	</script>
+
+	<p id=p style=margin-top:1em;display:none>
+
+	<img id=IMG src=data:, alt=test
+
+		onerror="onerror=null
+			this.pics= [ ['circles.png',20], ['eye.png',10], ['pepper.png',20], ['hamilton.gif',15], ['fido.jpg',25] ]
+			pics.n= 0
+			this.resize= function(x){
+				width=  (x/100)*naturalWidth
+				height= (x/100)*naturalHeight
+				window.info&&(info.innerHTML= x+'%')
+			}
+			src= pics[0][0]"
+
+		onload="p.style.display=''
+			if (!this.naturalWidth){
+				this.naturalWidth=  width
+				this.naturalHeight= height
+			}
+			resize( INPUT.value=pics[pics.n][1] ) "
+
+		onclick="p.style.display='none'
+			naturalWidth= naturalHeight= 0
+			removeAttribute('width')
+			removeAttribute('height')
+			pics.n= (++pics.n)%pics.length
+			src= pics[pics.n][0] "
+
+		title="click for other images"
+		onmouseout="title=''; onmouseout=null" >
+
