@@ -49,21 +49,18 @@
 			this.pics= [ ['circles.png',20], ['eye.png',10], ['pepper.png',20], ['hamilton.gif',15], ['fido.jpg',25] ]
 			pics.n= 0
 			this.resize= function(x){
-				width=  (x/100)*naturalWidth
-				height= (x/100)*naturalHeight
+				width=  (x/100)*W
+				height= (x/100)*H
 				window.info&&(info.innerHTML= x+'%')
 			}
 			src= pics[0][0]"
 
 		onload="p.style.display=''
-			if (!this.naturalWidth){
-				this.naturalWidth=  width
-				this.naturalHeight= height
-			}
+			this.W= this.naturalWidth||width
+			this.H= this.naturalHeight||height
 			resize( INPUT.value=pics[pics.n][1] ) "
 
 		onclick="p.style.display='none'
-			naturalWidth= naturalHeight= 0
 			removeAttribute('width')
 			removeAttribute('height')
 			pics.n= (++pics.n)%pics.length
