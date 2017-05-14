@@ -32,8 +32,9 @@
 			INPUT.outerHTML= '<input id=INPUT onchange=IMG.resize(value) onkeypress="X">'
 						.replace("X",[	"var k=event.charCode||event.keyCode",
 								"if (k=='\\r'.charCodeAt(0)) onchange()",
-								"else{	var n= -document.selection.createRange().moveStart('character',-value.length)",
-								"	var s= value.substring(0,n)+String.fromCharCode(k)+value.substring(n)",
+								"else{	var w=  document.selection.createRange().text.length",
+								"	var n= -document.selection.createRange().moveStart('character',-value.length)",
+								"	var s= value.substring(0,n)+String.fromCharCode(k)+value.substring(n+w)",
 								"	return s<=100",
 								"}"
 								].join(" \n") )
