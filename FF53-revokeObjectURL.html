@@ -25,7 +25,7 @@
 	<script>
 		onload= function(){
 			onload= function(){
-				var imgstring= '<img id=img src=$1 onload="$2" onerror="$3">'
+				var imgstring= '<img id=img src=$1 onload="$2" onerror="$3" style=display:none>'
 						.replace("$1", URL.createObjectURL( xhr.response ))
 						.replace("$2",[	"window[id]=this",
 								"var w=Math.min(400,naturalWidth)",
@@ -80,7 +80,7 @@
 				}
 				if (!dropfile) return false
 
-				try{ img.src= dropfile }					// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.  humph.
+				try{ img.src= dropfile; img.style.display="none" }		// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.  humph.
 				catch(e){ img.onerror( {type:e, timeStamp:Date.now()} )}
 
 				return false
