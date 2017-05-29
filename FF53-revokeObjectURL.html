@@ -95,14 +95,14 @@
 				imgdiv.innerHTML=''
 				this.textContent='insert img'
 			}else{
-				imgdiv.appendChild(window.img)			<!-- Chrome does **NOT need window.prefix here -->
+				imgdiv.appendChild(window.img)		// Chrome does **NOT need window.prefix here
 				this.textContent='remove img'
 			}"
 			>remove img</button>
 
 	<button	id=btn2 hidden
-		onclick="window.URL.revokeObjectURL(window.img.src)		<!-- need window.img prefix on img for Chrome** -->
-			this.disabled=true					<!-- need this. prefix for IE -->
+		onclick="window.URL.revokeObjectURL(window.img.src)	// need window.img prefix on img for Chrome**
+			this.disabled=true				// need this. prefix for IE -->
 			this.textContent='revoked'"
 			>
 			revoke blob</button>
