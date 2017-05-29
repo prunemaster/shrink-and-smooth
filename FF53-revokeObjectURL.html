@@ -43,7 +43,7 @@
 		try{	var xhr= new XMLHttpRequest()
 			xhr.open("GET","firefox_logo-only_RGB.png",true)
 			xhr.responseType="blob"
-			xhr.onload= onload
+			xhr.onload= function(){onload()}
 			xhr.onerror= function(evt){ onload( xhr={response:new Blob([""])} )}			// CHROME refuses xhr to local-desktop png.  fires ONERROR.
 			xhr.send()
 		}catch(e){ onload( xhr={response:new Blob([""])} )}						// IE refuses xhr to local-desktop png.  THROWS.
