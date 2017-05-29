@@ -32,7 +32,8 @@
 								"var h=naturalHeight*w/naturalWidth||0",
 								"imgdiv.style.cssText='width:'+w+'px; height:'+h+'px; border:1px solid black'",
 								"style.cssText='width:100%; height:100%; display:block'",
-								"btn.hidden=btn2.hidden=btn2.disabled=false",
+								"btn.hidden=btn2.hidden=false",
+								"btn2.disabled= src[0]=='b'?false:true",
 								"btn2.textContent='revoke blob'"
 								].join("\n"))
 						.replace("$3","document.body.insertAdjacentHTML('beforeend','<br>'+event.timeStamp+' &bull; '+event.type)")
@@ -44,9 +45,9 @@
 			xhr.open("GET","firefox_logo-only_RGB.png",true)
 			xhr.responseType="blob"
 			xhr.onload= function(){onload()}
-			xhr.onerror= function(evt){ onload( xhr={response:new Blob([""])} )}			// CHROME refuses xhr to local-desktop png.  fires ONERROR.
+			xhr.onerror= function(evt){ onload( xhr={response:new Blob([""])} )}			// CHROME refuses to xhr a local-desktop file.  fires ONERROR.
 			xhr.send()
-		}catch(e){ onload( xhr={response:new Blob([""])} )}						// IE refuses xhr to local-desktop png.  THROWS.
+		}catch(e){ onload( xhr={response:new Blob([""])} )}						// IE refuses to xhr a local-desktop file.  THROWS.
 
 
 		document.ondragenter=
