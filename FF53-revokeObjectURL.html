@@ -91,19 +91,18 @@
 	</div>
 
 	<button	id=btn hidden
-		onclick="if (textContent=='remove img'){
-				//imgdiv.removeChild(img)
+		onclick="if (this.textContent=='remove img'){
 				imgdiv.innerHTML=''
-				textContent='insert img'
+				this.textContent='insert img'
 			}else{
-				imgdiv.appendChild(img)
-				textContent='remove img'
+				imgdiv.appendChild(window.img)			<!-- Chrome does **NOT need window.prefix here -->
+				this.textContent='remove img'
 			}"
 			>remove img</button>
 
 	<button	id=btn2 hidden
-		onclick="window.URL.revokeObjectURL(img.src)
-			disabled=true
-			textContent='revoked'"
+		onclick="window.URL.revokeObjectURL(window.img.src)		<!-- need window.img prefix on img for Chrome** -->
+			this.disabled=true					<!-- need this. prefix for IE -->
+			this.textContent='revoked'"
 			>
 			revoke blob</button>
