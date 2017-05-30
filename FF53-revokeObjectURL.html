@@ -36,7 +36,7 @@
 								"btn2.disabled= src[0]=='b'?false:true",
 								"btn2.textContent='revoke blob'"
 								].join("\n"))
-						.replace("$3","document.body.insertAdjacentHTML('beforeend','<br>'+event.timeStamp+' &bull; '+event.type)")
+						.replace("$3","errdiv.insertAdjacentHTML('beforeend','<br>'+event.timeStamp+' &bull; '+event.type)")
 
 				imgdiv.insertAdjacentHTML("afterbegin", imgstring)
 			}
@@ -47,7 +47,8 @@
 			xhr.onload= function(){onload()}
 			xhr.onerror= function(evt){ onload( xhr={response:new Blob([""])} )}			// CHROME refuses to xhr a local-desktop file.  fires ONERROR.
 			xhr.send()
-		}catch(e){ onload( xhr={response:new Blob([""])} )}						// IE refuses to xhr a local-desktop file.  THROWS.
+		}
+		catch(e){ onload( xhr={response:new Blob([""])} )}						// IE refuses to xhr a local-desktop file.  THROWS.
 
 
 		document.ondragenter=
@@ -77,19 +78,22 @@
 									 "").match(/^https?:\/\/\S+|^file:\S+/i)
 									)
 						img.crossOrigin="anonymous"
-					}catch(e){/*( IE throws on text/plain )*/}
+					}
+					catch(e){/*( IE throws on text/plain )*/}
 				}
 				if (!dropfile) return false
 
-				try{ img.src= dropfile; img.style.display="none" }		// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.  humph.
-				catch(e){ img.onerror( {type:e, timeStamp:Date.now()} )}
+				try{	img.src= dropfile			// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
+					img.style.display="none"
+					errdiv.innerHTML=""
+				}
+				catch(e){ img.onerror( {type:e, timeStamp:Date.now()} ) }
 
 				return false
 			}
 	</script>
 
-	<div id=imgdiv>
-	</div>
+	<div id=imgdiv></div>
 
 	<button	id=btn hidden
 		onclick="if (this.textContent=='remove img'){
@@ -107,3 +111,5 @@
 			this.textContent='revoked'"
 			>
 			revoke blob</button>
+
+	<div id=errdiv></div>
