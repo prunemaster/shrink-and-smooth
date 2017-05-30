@@ -62,30 +62,30 @@
 			function(evt){
 				this.ondragover(evt)
 
-				var dt= evt.dataTransfer, dropfile
+				var dt= evt.dataTransfer, dropfile, CORS
 				if (!dt) return false
 
 				if (window.URL && dt.files && dt.files[0]){
 
-					if ( (/^image\//i).test(dt.files[0].type) ){
+					if ( (/^image\//i).test(dt.files[0].type) )
 						dropfile= URL.createObjectURL(dt.files[0])
-						img.removeAttribute("crossOrigin")
-					}
 				}else{
 					try{	dropfile=/*encodeURI*/(	(dt.getData('URL')        ||			// hmm. percent-encode it ?
 									 dt.getData('text')       ||
 									 dt.getData('text/plain') ||			// IE throws on "text/plain"
 									 "").match(/^https?:\/\/\S+|^file:\S+/i)
 									)
-						img.crossOrigin="anonymous"
+						CORS= /^h/i.test(dropfile)
 					}
 					catch(e){/*( IE throws on text/plain )*/}
 				}
 				if (!dropfile) return false
 
-				try{	img.src= dropfile			// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
-					img.style.display="none"
-					errdiv.innerHTML=""
+				img.style.display="none"
+				errdiv.innerHTML=""
+				try{	img.src= dropfile				// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
+					if (CORS) img.crossOrigin="anonymous"
+					else	  img.removeAttribute("crossOrigin")
 				}
 				catch(e){ img.onerror( {type:e, timeStamp:Date.now()} ) }
 
