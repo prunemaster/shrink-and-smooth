@@ -23,10 +23,13 @@
 	</style>
 
 	<script>
+		var initPic="firefox_logo-only_RGB.png"
+
 		onload= function(){
 			onload= function(){
 				var imgstring= '<img id=img src=$1 onload="$2" onerror="$3" style=display:none>'
-						.replace("$1", URL.createObjectURL( xhr.response ))
+
+						.replace("$1", xhr.response? URL.createObjectURL( xhr.response ) : initPic)
 						.replace("$2",[	"window[id]=this",
 								"var w=Math.min(400,naturalWidth)",
 								"var h=naturalHeight*w/naturalWidth||0",
@@ -34,7 +37,17 @@
 								"style.cssText='width:100%; height:100%; display:block'",
 								"btn.hidden=btn2.hidden=false",
 								"btn2.disabled= src[0]=='b'?false:true",
-								"btn2.textContent='revoke blob'"
+								"btn2.textContent='revoke blob'",
+								"if (src[0]!='b') try{",						// re-apply src as BLOB: for this demo   (happens only when img dragged from another browser window)
+								"	var c=document.createElement('canvas').getContext('2d')",	//                                       (only visible effect will be it enables [Revoke blob] button)
+								"	c.canvas.width=  naturalWidth",
+								"	c.canvas.height= naturalHeight",
+								"	c.drawImage(this, 0,0)",
+								"	c.canvas.toBlob(function(b){",
+								"		src=window.URL.createObjectURL(b)",
+								"		removeAttribute('crossOrigin')",
+								"		})",
+								"	}catch(e){ onerror({timeStamp:Date.now(),type:e}) }"
 								].join("\n"))
 						.replace("$3","errdiv.insertAdjacentHTML('beforeend','<br>'+event.timeStamp+' &bull; '+event.type)")
 
@@ -42,14 +55,17 @@
 			}
 		}
 		try{	var xhr= new XMLHttpRequest()
-			xhr.open("GET","firefox_logo-only_RGB.png",true)
+			xhr.open("GET", initPic, true)
 			xhr.responseType="blob"
-			xhr.onload= function(){onload()}
-			xhr.onerror= function(evt){ onload( xhr={response:new Blob([""])} )}			// CHROME refuses to xhr a local-desktop file.  fires ONERROR.
+			xhr.onload=  function(){onload()}
+			xhr.onerror= function(){onload()}			// CHROME refuses to xhr a local-desktop file.  fires ONERROR.
 			xhr.send()
 		}
-		catch(e){ onload( xhr={response:new Blob([""])} )}						// IE refuses to xhr a local-desktop file.  THROWS.
+		catch(e){ onload() }						// IE refuses to xhr a local-desktop file.  THROWS.
 
+
+
+		/******************( DRAG-N-DROP )*******************/
 
 		document.ondragenter=
 		document.ondragover=
@@ -70,14 +86,14 @@
 					if (/^image\//i.test(dt.files[0].type))
 						dropfile= URL.createObjectURL(dt.files[0])
 				}else{
-					try{	dropfile=/*encodeURI*/(	(dt.getData('URL')        ||			// hmm. percent-encode it ?
-									 dt.getData('text')       ||
-									 dt.getData('text/plain') ||			// IE throws on "text/plain"
-									 "").match(/^https?:\/\/\S+|^file:\S+/i)
-									)
+					try{	var r= /^https?:\/\/\S+|^file:\S+|^data:image\S+/i
+						dropfile=	dt.getData('URL')	.match(r)		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
+								dt.getData('text')	.match(r)		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
+								dt.getData('text/plain').match(r)			// IE11 throws on "text/plain"
+
 						CORS= /^h/i.test(dropfile)
 					}
-					catch(e){/*( IE throws on text/plain )*/}
+					catch(e){/*( IE11 throws on text/plain )*/}
 				}
 				if (!dropfile) return false
 
@@ -90,6 +106,29 @@
 				catch(e){ img.onerror( {type:e, timeStamp:Date.now()} ) }
 
 				return false
+			}
+		document.ondragstart=							// if BLOB:URL in dataTransfer object, use canvas to convert to DATA:URL.
+			function(evt){							// IE11 - dataTransfer here is EMPTY when img.src=BLOB:URL
+				try{	var dt= evt.dataTransfer
+					if ((img==evt.target) && (!dt.files||!dt.files.length)){
+
+						if (	(dt.types && dt.types.length==0)	||	// IE11
+							/^blob/.test(dt.getData('URL'))		||
+							/^blob/.test(dt.getData('text'))	||
+							/^blob/.test(dt.getData('text/plain'))	 ) {
+
+							var c=document.createElement("canvas").getContext('2d'), dataurl
+							c.canvas.width=  img.naturalWidth
+							c.canvas.height= img.naturalHeight
+							c.drawImage(img, 0,0)
+							dataurl= c.canvas.toDataURL()
+
+							dt.setData('URL',        dataurl)		// FIREFOX sets URL here (can verify with getData).  BUG but actually passes original BLOB:URL.
+							dt.setData('text',       dataurl)		// FIREFOX sets TEXT ok, passes DATA:URL ok.
+							dt.setData('text/plain', dataurl)
+						}
+					}
+				}catch(e){}
 			}
 	</script>
 
@@ -106,7 +145,7 @@
 			>remove img</button>
 
 	<button	id=btn2 hidden
-		onclick="window.URL.revokeObjectURL(window.img.src)	// need window.img prefix on img for Chrome**
+		onclick="window.URL.revokeObjectURL(window.img.src)	// need window.img prefix on img for CHROME**
 			this.disabled=true				// need this. prefix for IE
 			this.textContent='revoked'"
 			>
