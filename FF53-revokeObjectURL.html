@@ -138,7 +138,7 @@
 									var f= new File( [A],"foobird.png",{type:"image/png"} )
 									var a= dt.items.add(f)
 									if (a && a.kind=="file"){					// FIREFOX and CHROME show the FILE here, but discard it later
-										/* dt.clearData() //clears all non-file items only */	// CHROME BUG - clears "URL" item, stuffs filename into "text" and "text/plain" items
+										/* dt.clearData() //clears all non-file items only */	// CHROME BUG - dt.items.add(FILE) clears "URL" item, stuffs filename into "text" and "text/plain" items
 									}								// CHROME BUG - no way to detect and fix now, it happens later
 									else	throw( {message:"still no browser implements dataTransfer.items.add(file)"} )
 								}
