@@ -129,13 +129,17 @@
 							dt.setData('text/plain', dataurl)
 
 							if (dt.items && dt.items.add && typeof window.File=="function"){		// since all browsers crash with large DATA:URL, try to pass FILE.
-								try{	var d= atob( dataurl.split(",",2)[1] )				// but NO BROWSER SUPPORTS THIS to date.  :P
+								try{									// but NO BROWSER SUPPORTS THIS to date.  :P
+									if (dt.items[0].kind=="file" && dt.items[0].getAsFile()==null)	// CHROME
+										throw( {message:"foobird"} )				// CHROME
+									var d= atob( dataurl.split(",",2)[1] )
 									var A= new Uint8Array( d.length )
 									for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)
 									var f= new File( [A],"foobird.png",{type:"image/png"} )
 									var a= dt.items.add(f)
-									if (a && a.kind=="file")					// FIREFOX and CHROME show the FILE here, but discard it later
-										{/* dt.clearData() //clears all non-file items only */}
+									if (a && a.kind=="file"){					// FIREFOX and CHROME show the FILE here, but discard it later
+										/* dt.clearData() //clears all non-file items only */	// CHROME BUG - clears "URL" item, stuffs filename into "text" and "text/plain" items
+									}								// CHROME BUG - no way to detect and fix now, it happens later
 									else	throw( {message:"still no browser implements dataTransfer.items.add(file)"} )
 								}
 								catch(e){ img.onerror({timeStamp:Date.now(), type:e.message||e}) }
