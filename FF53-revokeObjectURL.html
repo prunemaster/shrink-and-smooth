@@ -87,10 +87,10 @@
 						dropfile= URL.createObjectURL(dt.files[0])
 				}else{
 					try{	var r= /^https?:\/\/\S+|^file:\S+|^data:image\S+/i
-						dropfile=	dt.getData('URL')	.match(r)		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
-								dt.getData('text')	.match(r)		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
-								dt.getData('text/plain').match(r)			// IE11 throws on "text/plain"
-
+						dropfile=	r.exec(dt.getData('URL'))		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
+								r.exec(dt.getData('text'))		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
+								r.exec(dt.getData('text/plain'))		// IE11 throws on "text/plain"
+														// IE11 gives NULL instead of empty DOMSTRING ("")  when getData(x) has no result
 						CORS= /^h/i.test(dropfile)
 					}
 					catch(e){/*( IE11 throws on text/plain )*/}
@@ -99,7 +99,7 @@
 
 				img.style.display="none"
 				errdiv.innerHTML=""
-				try{	img.src= dropfile				// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
+				try{	img.src= dropfile						// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
 					if (CORS) img.crossOrigin="anonymous"
 					else	  img.removeAttribute("crossOrigin")
 				}
@@ -107,8 +107,8 @@
 
 				return false
 			}
-		document.ondragstart=							// if BLOB:URL in dataTransfer object, use canvas to convert to DATA:URL.
-			function(evt){							// IE11 - dataTransfer here is EMPTY when img.src=BLOB:URL
+		document.ondragstart=									// if BLOB:URL in dataTransfer object, use canvas to convert to DATA:URL.
+			function(evt){									// IE11 - dataTransfer here is EMPTY when img.src=BLOB:URL
 				try{	var dt= evt.dataTransfer
 					if ((img==evt.target) && (!dt.files||!dt.files.length)){
 
@@ -121,11 +121,25 @@
 							c.canvas.width=  img.naturalWidth
 							c.canvas.height= img.naturalHeight
 							c.drawImage(img, 0,0)
+
 							dataurl= c.canvas.toDataURL()
 
 							dt.setData('URL',        dataurl)		// FIREFOX sets URL here (can verify with getData).  BUG but actually passes original BLOB:URL.
 							dt.setData('text',       dataurl)		// FIREFOX sets TEXT ok, passes DATA:URL ok.
 							dt.setData('text/plain', dataurl)
+
+							if (dt.items && dt.items.add && typeof window.File=="function"){		// since all browsers crash with large DATA:URL, try to pass FILE.
+								try{	var d= atob( dataurl.split(",",2)[1] )				// but NO BROWSER SUPPORTS THIS to date.  :P
+									var A= new Uint8Array( d.length )
+									for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)
+									var f= new File( [A],"foobird.png",{type:"image/png"} )
+									var a= dt.items.add(f)
+									if (a && a.kind=="file")					// FIREFOX and CHROME show the FILE here, but discard it later
+										{/* dt.clearData() //clears all non-file items only */}
+									else	throw( {message:"still no browser implements dataTransfer.items.add(file)"} )
+								}
+								catch(e){ img.onerror({timeStamp:Date.now(), type:e.message||e}) }
+							}
 						}
 					}
 				}catch(e){}
@@ -137,17 +151,17 @@
 	<button	id=btn hidden
 		onclick="if (this.textContent=='remove img'){
 				imgdiv.innerHTML=''
-				this.textContent='insert img'
+				textContent='insert img'
 			}else{
 				imgdiv.appendChild(window.img)		// Chrome does **NOT need window.prefix here
-				this.textContent='remove img'
+				textContent='remove img'
 			}"
 			>remove img</button>
 
 	<button	id=btn2 hidden
 		onclick="window.URL.revokeObjectURL(window.img.src)	// need window.img prefix on img for CHROME**
-			this.disabled=true				// need this. prefix for IE
-			this.textContent='revoked'"
+			disabled=true
+			textContent='revoked'"
 			>
 			revoke blob</button>
 
