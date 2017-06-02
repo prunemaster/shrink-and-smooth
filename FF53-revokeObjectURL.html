@@ -133,8 +133,10 @@
 									if (dt.items[0].kind=="file" && dt.items[0].getAsFile()==null)	// CHROME
 										throw( {message:"foobird"} )				// CHROME
 									var d= atob( dataurl.split(",",2)[1] )
-									var A= new Uint8Array( d.length )
-									for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)
+									//var A= new Uint8Array( d.length )				//
+									//for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)		//
+									////var A= Uint8Array.from( d, v=> v.charCodeAt(0) )		//// IE11 won't compile fat arrow
+									var A= Uint8Array.from( d,function(v){return v.charCodeAt(0)} )	//
 									var f= new File( [A],"foobird.png",{type:"image/png"} )
 									var a= dt.items.add(f)
 									if (a && a.kind=="file"){					// FIREFOX and CHROME show the FILE here, but discard it later
