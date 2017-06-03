@@ -145,6 +145,7 @@
 					if ((img==evt.target) && (img.dragging=true) && (!dt.files||!dt.files.length)){
 
 						if (img.dropfile){
+							try{ dt.clearData() }catch(e){}
 							dt.setData('URL',	 img.dropfile)
 							dt.setData('text',	 img.dropfile)
 							dt.setData('text/plain', img.dropfile)		// IE11, beware this throws, harmless exit
