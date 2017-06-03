@@ -38,20 +38,35 @@
 								"btn.hidden=btn2.hidden=false",
 								"btn2.disabled= src[0]=='b'?false:true",
 								"btn2.textContent='revoke blob'",
-								"if (src[0]!='b') try{",						// re-apply src as BLOB: for this demo   (happens only when img dragged from another browser window)
-								"	var c=document.createElement('canvas').getContext('2d')",	//                                       (only visible effect will be it enables [Revoke blob] button)
-								"	c.canvas.width=  naturalWidth",
-								"	c.canvas.height= naturalHeight",
-								"	c.drawImage(this, 0,0)",
-								"	c.canvas.toBlob(function(b){",
-								"		src=window.URL.createObjectURL(b)",
-								"		removeAttribute('crossOrigin')",
-								"		})",
-								"	}catch(e){ onerror({timeStamp:Date.now(),type:e}) }"
+								"try{	if (src[0]=='d') {",							// convert DATAURL src to BLOB: for this demo   (happens only when img dragged from another browser window)
+								"		var d= atob( src.split(',',2)[1] )",				//                                              (only visible effect will be it enables [Revoke blob] button)
+								"		var A= new Uint8Array( d.length )",
+								"		for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)",
+								"		var mimetype= src.match(/;(.*?),/)[1]",
+								"		var B= new Blob([A],{type:mimetype})",
+								"		src= window.URL.createObjectURL(B)",
+								"	}",
+								"	else if (src[0]!='b') {",						// ditto for src=URL  (non-DATA,non-BLOB  http,https,file)
+								"		var c=document.createElement('canvas').getContext('2d')",	//
+								"		c.canvas.width=  naturalWidth",
+								"		c.canvas.height= naturalHeight",
+								"		c.drawImage(this, 0,0)",
+								"		c.canvas.toBlob(function(b){",
+								"			src=window.URL.createObjectURL(b)",
+								"			removeAttribute('crossOrigin')",
+								"			})",
+								"	}",
+								"}catch(e){ onerror({timeStamp:Date.now(),type:e}) }"
 								].join("\n"))
 						.replace("$3","errdiv.insertAdjacentHTML('beforeend','<br>'+event.timeStamp+' &bull; '+event.type)")
 
 				imgdiv.insertAdjacentHTML("afterbegin", imgstring)
+
+				img.dropfile= location.href.replace(/[^\/]*$/, initPic)
+				if (window.FileReader){
+					img.F= new FileReader()
+					img.F.onload= function(){ img.dropfile= this.result }
+				}
 			}
 		}
 		try{	var xhr= new XMLHttpRequest()
@@ -89,10 +104,10 @@
 						dropfile= URL.createObjectURL(dt.files[0])
 				}else{
 					try{	var r= /^https?:\/\/\S+|^file:\S+|^data:image\S+/i
-						dropfile=	r.exec(dt.getData('URL'))		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
-								r.exec(dt.getData('text'))		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
-								r.exec(dt.getData('text/plain'))		// IE11 throws on "text/plain"
-														// IE11 gives NULL instead of empty DOMSTRING ("")  when getData(x) has no result
+						dropfile=	(r.exec(dt.getData('URL'))		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
+								 r.exec(dt.getData('text'))		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
+								 r.exec(dt.getData('text/plain'))	||	// IE11 throws on "text/plain"
+								 "")[0]						// IE11 gives NULL instead of empty DOMSTRING ("")  when getData(x) has no result - beware getData(x).match(r)===null.match(r) throws
 						CORS= /^h/i.test(dropfile)
 					}
 					catch(e){/*( IE11 throws on text/plain )*/}
@@ -102,9 +117,20 @@
 				img.style.display="none"
 				errdiv.innerHTML=""
 
+				if (window.URL && /^blob:/.test(img.src)) URL.revokeObjectURL(img.src)
+
 				try{	img.src= dropfile						// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
 					if (CORS) img.crossOrigin="anonymous"
 					else	  img.removeAttribute("crossOrigin")
+
+					if (/^blob:/.test(dropfile)){
+						img.dropfile= null
+						img.F.abort()
+						img.F.readAsDataURL( dt.files[0] )
+					}else{
+						img.dropfile= dropfile
+						img.F.abort()
+					}
 				}
 				catch(e){ img.onerror( {type:e, timeStamp:Date.now()} ) }
 
@@ -113,12 +139,25 @@
 		document.ondragend=
 			function(evt){ img.dragging=false }
 
-		document.ondragstart=									// if BLOB:URL in dataTransfer object, use canvas to convert to DATA:URL.
-			function(evt){									// IE11 - dataTransfer here is EMPTY when img.src=BLOB:URL
+		document.ondragstart=
+			function(evt){
 				try{	var dt= evt.dataTransfer
 					if ((img==evt.target) && (img.dragging=true) && (!dt.files||!dt.files.length)){
 
-						if (	(dt.types && dt.types.length==0)	||	// IE11
+						if (img.dropfile){
+							dt.setData('URL',	 img.dropfile)
+							dt.setData('text',	 img.dropfile)
+							dt.setData('text/plain', img.dropfile)		// IE11, beware this throws, harmless exit
+							return
+						}
+
+							// below code never evaluates "true" anymore (unless FileReader somehow faults), not since "img.dropfile" was added.
+							// now, when img.src=BLOBURL, img.dropfile==DATAURL too.  this works out to be the best way to drag-out the image.
+							// best, because dataTransfer.items.add(FILE) doesn't work.  and capturing a static img copy below via canvas loses GIF animation.
+							// so the strategy was changed to immediately record any incoming FILE as DATAURL, then use it directly above for drag-start.
+
+													// if BLOB:URL in dataTransfer object, use canvas to convert to DATA:URL.
+						if (	(dt.types && dt.types.length==0)	||	// IE11 - dataTransfer here is EMPTY when img.src=BLOB:URL
 							/^blob/.test(dt.getData('URL'))		||
 							/^blob/.test(dt.getData('text'))	||
 							/^blob/.test(dt.getData('text/plain'))	 ) {
@@ -143,7 +182,7 @@
 									//for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)		//
 									////var A= Uint8Array.from( d, v=> v.charCodeAt(0) )		//// IE11 won't compile fat arrow
 									var A= Uint8Array.from( d,function(v){return v.charCodeAt(0)} )	//
-									var f= new File( [A],"foobird.png",{type:"image/png"} )
+									var f= new File( [A],"foobird.png",{type:"image/png"} )		// MS-EDGE still throws on new File()  (despite File=="function" true)
 									var a= dt.items.add(f)
 									if (a && a.kind=="file"){					// FIREFOX and CHROME show the FILE here, but discard it later
 										/* dt.clearData() //clears all non-file items only */	// CHROME BUG - dt.items.add(FILE) clears "URL" item, stuffs filename into "text" and "text/plain" items
