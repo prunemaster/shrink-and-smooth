@@ -78,6 +78,8 @@
 			function(evt){
 				this.ondragover(evt)
 
+				if (img.dragging) return (img.dragging=false)
+
 				var dt= evt.dataTransfer, dropfile, CORS
 				if (!dt) return false
 
@@ -99,6 +101,7 @@
 
 				img.style.display="none"
 				errdiv.innerHTML=""
+
 				try{	img.src= dropfile						// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
 					if (CORS) img.crossOrigin="anonymous"
 					else	  img.removeAttribute("crossOrigin")
@@ -107,10 +110,13 @@
 
 				return false
 			}
+		document.ondragend=
+			function(evt){ img.dragging=false }
+
 		document.ondragstart=									// if BLOB:URL in dataTransfer object, use canvas to convert to DATA:URL.
 			function(evt){									// IE11 - dataTransfer here is EMPTY when img.src=BLOB:URL
 				try{	var dt= evt.dataTransfer
-					if ((img==evt.target) && (!dt.files||!dt.files.length)){
+					if ((img==evt.target) && (img.dragging=true) && (!dt.files||!dt.files.length)){
 
 						if (	(dt.types && dt.types.length==0)	||	// IE11
 							/^blob/.test(dt.getData('URL'))		||
