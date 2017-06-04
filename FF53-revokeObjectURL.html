@@ -42,7 +42,7 @@
 								"		var d= atob( src.split(',',2)[1] )",				//                                              (only visible effect will be it enables [Revoke blob] button)
 								"		var A= new Uint8Array( d.length )",
 								"		for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)",
-								"		var mimetype= src.match(/;(.*?),/)[1]",
+								"		var mimetype= src.match(/[^:;,]*(?=;|,)/)[0]",
 								"		var B= new Blob([A],{type:mimetype})",
 								"		src= window.URL.createObjectURL(B)",
 								"	}",
