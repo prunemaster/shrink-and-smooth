@@ -103,16 +103,19 @@
 					if (/^image\//i.test(dt.files[0].type))
 						dropfile= URL.createObjectURL(dt.files[0])
 				}else{
-					try{	var r= /^https?:\/\/\S+|^file:\S+|^data:image\/[^\s;,]+;base64,[\S\s]+/
-						dropfile=	(r.exec(dt.getData('URL'))		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
-								 r.exec(dt.getData('text'))		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
-								 r.exec(dt.getData('text/plain'))	||	// IE11 throws on "text/plain"
-								 "")[0]						// IE11 gives NULL instead of empty DOMSTRING ("")  when getData(x) has no result - beware getData(x).match(r)===null.match(r) throws
-						CORS= /^h/i.test(dropfile)
+					try{	var r= /^https?:\/\/\S+|^file:\S+|^data:image\/[^\s;,]+;base64,[\S\s]/g
+						dropfile=	r.exec(dt.getData('URL'))		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
+								r.exec(dt.getData('text'))		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
+								r.exec(dt.getData('text/plain'))		// IE11 throws on "text/plain"
+														// IE11 gives NULL instead of empty DOMSTRING ("")  when getData(x) has no result - beware getData(x).match(r)===null.match(r) throws
+						CORS= /^h/.test(dropfile)
 					}
 					catch(e){/*( IE11 throws on text/plain )*/}
 				}
 				if (!dropfile) return false
+
+				if	(dropfile[0][0] =='d') dropfile= dropfile.input			// the /g is a performance optimization.  a large MB exec(dataurl) with [\S\s]+ would otherwise take 10s of ms.
+				else if	(dropfile[0][0] !='b') dropfile= dropfile[0]
 
 				img.style.display="none"
 				errdiv.innerHTML=""
