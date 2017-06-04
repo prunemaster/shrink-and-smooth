@@ -103,7 +103,7 @@
 					if (/^image\//i.test(dt.files[0].type))
 						dropfile= URL.createObjectURL(dt.files[0])
 				}else{
-					try{	var r= /^https?:\/\/\S+|^file:\S+|^data:image\S+/i
+					try{	var r= /^https?:\/\/\S+|^file:\S+|^data:image\/[^\s;,]+;base64,[\S\s]+/
 						dropfile=	(r.exec(dt.getData('URL'))		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
 								 r.exec(dt.getData('text'))		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
 								 r.exec(dt.getData('text/plain'))	||	// IE11 throws on "text/plain"
