@@ -65,7 +65,7 @@
 				img.dropfile= location.href.replace(/[^\/]*$/, initPic)
 				if (window.FileReader){
 					img.F= new FileReader()
-					img.F.onload= function(){ img.dropfile= this.result.match(/^data:image\/[^\s;,]+;base64,[\S\s]+|$/)[0] }
+					img.F.onload= function(){ img.dropfile= this.result.match(/^data:image\/[^\s;,]+;base64,[\S\s]/) && this.result }
 				}
 			}
 		}
