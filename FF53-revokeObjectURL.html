@@ -120,7 +120,7 @@
 				img.style.display="none"
 				errdiv.innerHTML=""
 
-				if (window.URL && /^blob:/.test(img.src)) URL.revokeObjectURL(img.src)
+				if (/^blob:/.test(img.src)) URL.revokeObjectURL(img.src)
 
 				try{	img.src= dropfile						// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
 					if (CORS) img.crossOrigin="anonymous"
@@ -128,11 +128,11 @@
 
 					if (/^blob:/.test(dropfile)){
 						img.dropfile= null
-						img.F.abort()
-						img.F.readAsDataURL( dt.files[0] )
+						try{ img.F && img.F.abort() }catch(e){}			// FIREFOX 47 BUG  throws unless readyState==1 ("LOADING")  fixed in later version
+						img.F && img.F.readAsDataURL( dt.files[0] )
 					}else{
 						img.dropfile= dropfile
-						img.F.abort()
+						try{ img.F && img.F.abort() }catch(e){}			// FIREFOX 47 BUG  throws unless readyState==1 ("LOADING")  fixed in later version
 					}
 				}
 				catch(e){ img.onerror( {type:e, timeStamp:Date.now()} ) }
@@ -148,7 +148,7 @@
 					if ((img==evt.target) && (img.dragging=true) && (!dt.files||!dt.files.length)){
 
 						if (img.dropfile){
-							try{ dt.clearData() }catch(e){}
+							dt.clearData()
 							dt.setData('URL',	 img.dropfile)
 							dt.setData('text',	 img.dropfile)
 							dt.setData('text/plain', img.dropfile)		// IE11, beware this throws, harmless exit
@@ -156,9 +156,9 @@
 						}
 
 							// below code never evaluates "true" anymore (unless FileReader somehow faults), not since "img.dropfile" was added.
-							// now, when img.src=BLOBURL, img.dropfile==DATAURL too.  this works out to be the best way to drag-out the image.
-							// best, because dataTransfer.items.add(FILE) doesn't work.  and capturing a static img copy below via canvas loses GIF animation.
-							// so the strategy was changed to immediately record any incoming FILE as DATAURL, then use it directly above for drag-start.
+							// now, if img.src==BLOBURL, then img.dropfile==DATAURL too.  this works out to be the best way to drag-out the image.
+							// best, because dataTransfer.items.add(FILE) doesn't work.  and capturing a  *static*  img snapshot below via canvas loses GIF animation.
+							// so the strategy was changed to record any incoming (ondrop) FILE as DATAURL, then use it above for drag-start event when it happens.
 
 													// if BLOB:URL in dataTransfer object, use canvas to convert to DATA:URL.
 						if (	(dt.types && dt.types.length==0)	||	// IE11 - dataTransfer here is EMPTY when img.src=BLOB:URL
