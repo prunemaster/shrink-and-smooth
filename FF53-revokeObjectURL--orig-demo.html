@@ -1,0 +1,223 @@
+<!doctype html>
+	<meta charset=utf-8>
+	<title>Firefox53 img.src=blob bugtest</title>
+
+	<!-- ======================================================================================= -->
+	<!--                                                                                         -->
+	<!-- in SHRINK-AND-SMOOTH.HTML:                                                              -->
+	<!-- when FIREFOX 53 inserts an IMG with SRC=BLOB into DOM, it causes IMG.ONERROR to fire.   -->
+	<!--                                                                                         -->
+	<!-- after some study, it is traced down to this:                                            -->
+	<!-- during IMG.ONLOAD this is executed.                                                     -->
+	<!--                                                                                         -->
+	<!--     URL.revokeObjectURL(img.src)                                                        -->
+	<!--                                                                                         -->
+	<!-- thereafter, when the IMG is inserted into DOM, it renders fine.  But it fires ONERROR.  -->
+	<!--                                                                                         -->
+	<!-- ======================================================================================= -->
+
+	<style>
+		* { font-family:'Segoe UI',sans-serif; font-size:12pt }
+		#btn { margin:1em 2em 1em 0 }
+		::-moz-focus-inner { border:0; padding:0 }
+	</style>
+
+	<script>
+		var initPic="firefox_logo-only_RGB.png"
+
+		onload= function(){
+			onload= function(){
+				var imgstring= '<img id=img src=$1 onload="$2" onerror="$3" style=display:none>'
+
+						.replace("$1", xhr.response? URL.createObjectURL( xhr.response ) : initPic)
+						.replace("$2",[	"window[id]=this",
+								"var w=Math.min(400,naturalWidth)",
+								"var h=naturalHeight*w/naturalWidth||0",
+								"imgdiv.style.cssText='width:'+w+'px; height:'+h+'px; border:1px solid black'",
+								"style.cssText='width:100%; height:100%; display:block'",
+								"btn.hidden=btn2.hidden=false",
+								"btn2.disabled= src[0]=='b'?false:true",
+								"btn2.textContent='revoke blob'",
+								"try{	if (src[0]=='d') {",							// convert DATAURL src to BLOB: for this demo   (happens only when img dragged from another browser window)
+								"		var d= atob( src.split(',',2)[1] )",				//                                              (only visible effect will be it enables [Revoke blob] button)
+								"		var A= new Uint8Array( d.length )",
+								"		for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)",
+								"		var mimetype= src.match(/[^:;,]*(?=;|,)/)[0]",
+								"		var B= new Blob([A],{type:mimetype})",
+								"		src= window.URL.createObjectURL(B)",
+								"	}",
+								"	else if (src[0]!='b') {",						// ditto for src=URL  (non-DATA,non-BLOB  http,https,file)
+								"		var c=document.createElement('canvas').getContext('2d')",	//
+								"		c.canvas.width=  naturalWidth",
+								"		c.canvas.height= naturalHeight",
+								"		c.drawImage(this, 0,0)",
+								"		c.canvas.toBlob(function(b){",
+								"			src=window.URL.createObjectURL(b)",
+								"			removeAttribute('crossOrigin')",
+								"			})",
+								"	}",
+								"}catch(e){ onerror({timeStamp:Date.now(),type:e}) }"
+								].join("\n"))
+						.replace("$3","errdiv.insertAdjacentHTML('beforeend','<br>'+event.timeStamp+' &bull; '+event.type)")
+
+				imgdiv.insertAdjacentHTML("afterbegin", imgstring)
+
+				img.dropfile= location.href.replace(/[^\/]*$/, initPic)
+				if (window.FileReader){
+					img.F= new FileReader()
+					img.F.onload= function(){ img.dropfile= this.result.match(/^data:image\/[^\s;,]+;base64,[\S\s]/) && this.result }
+				}
+			}
+		}
+		try{	var xhr= new XMLHttpRequest()
+			xhr.open("GET", initPic, true)
+			xhr.responseType="blob"
+			xhr.onload=  function(){onload()}
+			xhr.onerror= function(){onload()}			// CHROME refuses to xhr a local-desktop file.  fires ONERROR.
+			xhr.send()
+		}
+		catch(e){ onload() }						// IE refuses to xhr a local-desktop file.  THROWS.
+
+
+
+		/******************( DRAG-N-DROP )*******************/
+
+		document.ondragenter=
+		document.ondragover=
+			function(evt){
+				evt.stopPropagation && evt.stopPropagation()
+				evt.preventDefault && evt.preventDefault()
+				return ( evt.returnValue= false )
+			}
+		document.ondrop=
+			function(evt){
+				this.ondragover(evt)
+
+				if (img.dragging) return (img.dragging=false)
+
+				var dt= evt.dataTransfer, dropfile, CORS
+				if (!dt) return false
+
+				if (window.URL && dt.files && dt.files[0]){
+
+					if (/^image\//i.test(dt.files[0].type))
+						dropfile= URL.createObjectURL(dt.files[0])
+				}else{
+					try{	var r= /^https?:\/\/\S+|^file:\S+|^data:image\/[^\s;,]+;base64,[\S\s]/g
+						dropfile=	r.exec(dt.getData('URL'))		||	// FIREFOX BUG - after replacing BLOB:URL with DATA:URL, getData("URL") still has original BLOB:URL here.
+								r.exec(dt.getData('text'))		||	//               causes problem for IE when dragging from FF to IE because then getData("URL") is Firefox blob:url
+								r.exec(dt.getData('text/plain'))		// IE11 throws on "text/plain"
+														// IE11 gives NULL instead of empty DOMSTRING ("")  when getData(x) has no result - beware getData(x).match(r)===null.match(r) throws
+						CORS= /^h/.test(dropfile)
+					}
+					catch(e){/*( IE11 throws on text/plain )*/}
+				}
+				if (!dropfile) return false
+
+				if	(dropfile[0][0] =='d') dropfile= dropfile.input			// the /g is a performance optimization.  a large MB exec(dataurl) with [\S\s]+ would otherwise take 10s of ms.
+				else if	(dropfile[0][0] !='b') dropfile= dropfile[0]
+
+				img.style.display="none"
+				errdiv.innerHTML=""
+
+				if (/^blob:/.test(img.src)) URL.revokeObjectURL(img.src)
+
+				try{	img.src= dropfile						// FIREFOX throws here if it's CORS "tainted", without indicating any reason why.  Just Event type=error.
+					if (CORS) img.crossOrigin="anonymous"
+					else	  img.removeAttribute("crossOrigin")
+
+					if (/^blob:/.test(dropfile)){
+						img.dropfile= null
+						try{ img.F && img.F.abort() }catch(e){}			// FIREFOX 47 BUG  throws unless readyState==1 ("LOADING")  fixed in later version
+						img.F && img.F.readAsDataURL( dt.files[0] )
+					}else{
+						img.dropfile= dropfile
+						try{ img.F && img.F.abort() }catch(e){}			// FIREFOX 47 BUG  throws unless readyState==1 ("LOADING")  fixed in later version
+					}
+				}
+				catch(e){ img.onerror( {type:e, timeStamp:Date.now()} ) }
+
+				return false
+			}
+		document.ondragend=
+			function(evt){ img.dragging=false }
+
+		document.ondragstart=
+			function(evt){
+				try{	var dt= evt.dataTransfer
+					if ((img==evt.target) && (img.dragging=true) && (!dt.files||!dt.files.length)){
+
+						if (img.dropfile){
+							dt.clearData()
+							dt.setData('URL',	 img.dropfile)
+							dt.setData('text',	 img.dropfile)
+							dt.setData('text/plain', img.dropfile)		// IE11, beware this throws, harmless exit
+							return
+						}
+
+							// below code never evaluates "true" anymore (unless FileReader somehow faults), not since "img.dropfile" was added.
+							// now, if img.src==BLOBURL, then img.dropfile==DATAURL too.  this works out to be the best way to drag-out the image.
+							// best, because dataTransfer.items.add(FILE) doesn't work.  and capturing a  *static*  img snapshot below via canvas loses GIF animation.
+							// so the strategy was changed to record any incoming (ondrop) FILE as DATAURL, then use it above for drag-start event when it happens.
+
+													// if BLOB:URL in dataTransfer object, use canvas to convert to DATA:URL.
+						if (	(dt.types && dt.types.length==0)	||	// IE11 - dataTransfer here is EMPTY when img.src=BLOB:URL
+							/^blob/.test(dt.getData('URL'))		||
+							/^blob/.test(dt.getData('text'))	||
+							/^blob/.test(dt.getData('text/plain'))	 ) {
+
+							var c=document.createElement("canvas").getContext('2d'), dataurl
+							c.canvas.width=  img.naturalWidth
+							c.canvas.height= img.naturalHeight
+							c.drawImage(img, 0,0)
+
+							dataurl= c.canvas.toDataURL()
+
+							dt.setData('URL',        dataurl)		// FIREFOX sets URL here (can verify with getData).  BUG but actually passes original BLOB:URL.
+							dt.setData('text',       dataurl)		// FIREFOX sets TEXT ok, passes DATA:URL ok.
+							dt.setData('text/plain', dataurl)
+
+							if (dt.items && dt.items.add && typeof window.File=="function"){		// since all browsers crash with large DATA:URL, try to pass FILE.
+								try{									// but NO BROWSER SUPPORTS THIS to date.  :P
+									if (dt.items[0].kind=="file" && dt.items[0].getAsFile()==null)	// CHROME
+										throw( {message:"foobird"} )				// CHROME
+									var d= atob( dataurl.split(",",2)[1] )
+									//var A= new Uint8Array( d.length )				//
+									//for (var i=0; i<d.length; i++) A[i]=d.charCodeAt(i)		//
+									////var A= Uint8Array.from( d, v=> v.charCodeAt(0) )		//// IE11 won't compile fat arrow
+									var A= Uint8Array.from( d,function(v){return v.charCodeAt(0)} )	//
+									var f= new File( [A],"foobird.png",{type:"image/png"} )		// MS-EDGE still throws on new File()  (despite File=="function" true)
+									var a= dt.items.add(f)
+									if (a && a.kind=="file"){					// FIREFOX and CHROME show the FILE here, but discard it later
+										/* dt.clearData() //clears all non-file items only */	// CHROME BUG - dt.items.add(FILE) clears "URL" item, stuffs filename into "text" and "text/plain" items
+									}								// CHROME BUG - no way to detect and fix now, it happens later
+									else	throw( {message:"still no browser implements dataTransfer.items.add(file)"} )
+								}
+								catch(e){ img.onerror({timeStamp:Date.now(), type:e.message||e}) }
+							}
+						}
+					}
+				}catch(e){}
+			}
+	</script>
+
+	<div id=imgdiv></div>
+
+	<button	id=btn hidden
+		onclick="if (this.textContent=='remove img'){
+				imgdiv.innerHTML=''
+				textContent='insert img'
+			}else{
+				imgdiv.appendChild(window.img)		// Chrome does **NOT need window.prefix here
+				textContent='remove img'
+			}"
+			>remove img</button>
+
+	<button	id=btn2 hidden
+		onclick="window.URL.revokeObjectURL(window.img.src)	// need window.img prefix on img for CHROME**
+			disabled=true
+			textContent='revoked'"
+			>
+			revoke blob</button>
+
+	<div id=errdiv></div>
